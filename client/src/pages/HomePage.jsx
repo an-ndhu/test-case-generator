@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { stepPath } from '../api/sessions';
 import Composer from '../components/Composer';
-import { createProject, fetchSessions, removeProject } from '../store/sessionsSlice';
+import { addProjectFile, createProject, fetchSessions, removeProject } from '../store/sessionsSlice';
 
 export default function HomePage() {
   const dispatch = useDispatch();
@@ -16,11 +16,17 @@ export default function HomePage() {
     dispatch(fetchSessions());
   }, [dispatch]);
 
-  async function start(extra = {}) {
-    const result = await dispatch(createProject({ title: extra.title, requirementText: text }));
-    if (createProject.fulfilled.match(result)) {
-      navigate(`/projects/${result.payload._id}/name`);
+  async function start() {
+    const result = await dispatch(
+      createProject({ requirementText: text, contextNote: text })
+    );
+    if (!createProject.fulfilled.match(result)) return;
+    const id = result.payload._id;
+    if (file) {
+      const up = await dispatch(addProjectFile({ id, file }));
+      if (addProjectFile.rejected.match(up)) return;
     }
+    navigate(`/projects/${id}/name`);
   }
 
   async function remove(e, id) {
@@ -47,7 +53,17 @@ export default function HomePage() {
       </div>
       <div>
         {error && <div className="banner composer-wrap">{error}</div>}
-        <Composer value={text} onChange={setText} file={file} onFile={setFile} onSubmit={() => start()} busy={status === 'busy'} />
+        <Composer
+          value={text}
+          onChange={setText}
+          file={file}
+          onFile={(picked, inputEl) => {
+            if (inputEl) inputEl.value = '';
+            setFile(picked);
+          }}
+          onSubmit={() => start()}
+          busy={status === 'busy'}
+        />
         {list.length > 0 && (
           <section className="history">
             <h2>Your sessions</h2>

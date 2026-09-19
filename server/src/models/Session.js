@@ -47,6 +47,7 @@ const testCaseSchema = new mongoose.Schema({
   expected: { type: String, default: '' },
   selected: { type: Boolean, default: true },
   explicit: { type: Boolean, default: true },
+  workflowIndex: { type: Number, default: 0 },
 });
 
 const sessionSchema = new mongoose.Schema(

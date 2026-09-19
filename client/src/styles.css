@@ -588,6 +588,7 @@ textarea {
   font-weight: 700;
   cursor: pointer;
 }
+.file-list { display: flex; flex-direction: column; gap: 8px; }
 .selected-file { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .actions.end { justify-content: flex-end; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

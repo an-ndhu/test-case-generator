@@ -7,10 +7,11 @@ export function useProject() {
   const { id } = useParams();
   const dispatch = useDispatch();
   const { current, status, error, notice } = useSelector((s) => s.sessions);
+  const match = current && String(current._id) === String(id) ? current : null;
 
   useEffect(() => {
     if (id) dispatch(fetchSession(id));
   }, [dispatch, id]);
 
-  return { id, current, status, error, notice, dispatch };
+  return { id, current: match, status, error, notice, dispatch };
 }

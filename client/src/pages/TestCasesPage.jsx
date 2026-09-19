@@ -1,31 +1,57 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Composer from '../components/Composer';
 import StepBack from '../components/StepBack';
+import { nextOf } from '../api/steps';
+import { useDebouncedPatch } from '../hooks/useDebouncedPatch';
 import { useProject } from '../hooks/useProject';
 import { patchProject } from '../store/sessionsSlice';
 
 export default function TestCasesPage() {
-  const { id, current, dispatch } = useProject();
+  const { id, current, dispatch, error } = useProject();
   const navigate = useNavigate();
   const [open, setOpen] = useState(0);
   const [composer, setComposer] = useState('');
+  const [localError, setLocalError] = useState('');
+  const [cases, setCases] = useState([]);
+  const { save, flush } = useDebouncedPatch(dispatch);
+
+  useEffect(() => {
+    if (current) setCases(current.testCases || []);
+  }, [current?._id]);
 
   if (!current) return <div className="spinner" />;
-  const cases = current.testCases || [];
-  const selected = cases.filter((c) => c.selected).length;
+  const selected = cases.filter((c) => c.selected !== false).length;
+  const nxt = nextOf('testcases', current.design);
 
-  function toggle(i, selected) {
-    dispatch(patchProject({ id, testCases: cases.map((c, idx) => (idx === i ? { ...c, selected } : c)) }));
+  function persist(next) {
+    setCases(next);
+    save({ id, testCases: next });
+  }
+
+  function toggle(i, selectedVal) {
+    persist(cases.map((c, idx) => (idx === i ? { ...c, selected: selectedVal } : c)));
   }
 
   function edit(i, field, value) {
-    dispatch(patchProject({ id, testCases: cases.map((c, idx) => (idx === i ? { ...c, [field]: value } : c)) }));
+    persist(cases.map((c, idx) => (idx === i ? { ...c, [field]: value } : c)));
   }
 
   async function proceed() {
-    await dispatch(patchProject({ id, step: 'export' }));
-    navigate(`/projects/${id}/export`);
+    const chosen = cases.filter((c) => c.selected !== false);
+    if (!chosen.length) {
+      setLocalError('Select at least one test case.');
+      return;
+    }
+    setLocalError('');
+    await flush();
+    if (!nxt) {
+      await dispatch(patchProject({ id, testCases: cases, step: 'testcases' }));
+      navigate('/');
+      return;
+    }
+    await dispatch(patchProject({ id, testCases: cases, step: nxt.step }));
+    navigate(nxt.path(id));
   }
 
   return (
@@ -36,6 +62,7 @@ export default function TestCasesPage() {
         All {current.userStories?.length || 0} user stories are approved.
       </p>
       <p className="subhead">Step4: review the test cases</p>
+      {(error || localError) && <p className="banner">{error || localError}</p>}
       <section className="panel">
         <div className="panel-head">
           <h2>Generated Testcases ({cases.length})</h2>
@@ -43,7 +70,11 @@ export default function TestCasesPage() {
         {cases.map((c, i) => (
           <div key={c._id || i} className="acc">
             <div className="acc-head">
-              <input type="checkbox" checked={!!c.selected} onChange={(e) => toggle(i, e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={c.selected !== false}
+                onChange={(e) => toggle(i, e.target.checked)}
+              />
               <button type="button" onClick={() => setOpen(open === i ? -1 : i)}>
                 {open === i ? '▾' : '▸'} {c.title}
               </button>
@@ -84,7 +115,7 @@ export default function TestCasesPage() {
           <div className="bulk">
             {selected} Selected
             <button className="btn primary" type="button" onClick={proceed}>
-              Approve
+              {nxt ? 'Approve' : 'Done'}
             </button>
           </div>
         )}

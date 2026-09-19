@@ -15,46 +15,56 @@ export function canonicalStep(current) {
   return current === 'canvas' ? 'workflows' : current;
 }
 
+export function wizardSteps(design) {
+  const steps = ['name', 'context', 'design', 'workflows', 'rules'];
+  if (design?.wantStories !== false) steps.push('stories');
+  if (design?.wantCases !== false) {
+    steps.push('testcases', 'export');
+  }
+  return steps;
+}
+
 export function stepPath(session) {
   if (!session?._id) return '/';
-  const key = session.latestStep || session.step || 'name';
+  const allowed = wizardSteps(session.design);
+  let key = session.latestStep || session.step || 'name';
+  if (!allowed.includes(key)) {
+    key = allowed[allowed.length - 1] || 'name';
+  }
   const fn = PATHS[key] || PATHS.name;
   return fn(session._id);
 }
 
-export function previousOf(current) {
-  const map = {
-    name: { path: '/', step: null },
-    context: { path: (id) => PATHS.name(id), step: 'name' },
-    design: { path: (id) => PATHS.context(id), step: 'context' },
-    workflows: { path: (id) => PATHS.design(id), step: 'design' },
-    canvas: { path: (id) => PATHS.workflows(id), step: 'workflows' },
-    rules: { path: (id) => PATHS.workflows(id), step: 'workflows' },
-    stories: { path: (id) => PATHS.rules(id), step: 'rules' },
-    testcases: { path: (id) => PATHS.stories(id), step: 'stories' },
-    export: { path: (id) => PATHS.testcases(id), step: 'testcases' },
-  };
-  return map[current];
+export function pathFor(id, step) {
+  const fn = PATHS[step] || PATHS.name;
+  return fn(id);
 }
 
-export function nextOf(current) {
-  const map = {
-    name: { path: (id) => PATHS.context(id), step: 'context' },
-    context: { path: (id) => PATHS.design(id), step: 'design' },
-    design: { path: (id) => PATHS.workflows(id), step: 'workflows' },
-    workflows: { path: (id) => PATHS.rules(id), step: 'rules' },
-    canvas: { path: (id) => PATHS.rules(id), step: 'rules' },
-    rules: { path: (id) => PATHS.stories(id), step: 'stories' },
-    stories: { path: (id) => PATHS.testcases(id), step: 'testcases' },
-    testcases: { path: (id) => PATHS.export(id), step: 'export' },
-  };
-  return map[current];
+export function previousOf(current, design) {
+  if (current === 'name') return { path: '/', step: null };
+  if (current === 'canvas') return { path: (id) => PATHS.workflows(id), step: 'workflows' };
+  const steps = wizardSteps(design);
+  const key = canonicalStep(current);
+  const i = steps.indexOf(key);
+  if (i <= 0) return { path: '/', step: null };
+  const step = steps[i - 1];
+  return { path: (id) => PATHS[step](id), step };
 }
 
-export function canGoForward(current, latestStep) {
-  const next = nextOf(current);
+export function nextOf(current, design) {
+  const steps = wizardSteps(design);
+  const key = canonicalStep(current);
+  const i = steps.indexOf(key);
+  if (i < 0 || i >= steps.length - 1) return null;
+  const step = steps[i + 1];
+  return { path: (id) => PATHS[step](id), step };
+}
+
+export function canGoForward(current, latestStep, design) {
+  const next = nextOf(current, design);
   if (!next) return false;
-  const latest = STEP_ORDER.indexOf(latestStep || 'name');
-  const target = STEP_ORDER.indexOf(next.step);
-  return target !== -1 && target <= latest;
+  const allowed = wizardSteps(design);
+  const latest = allowed.indexOf(latestStep || 'name');
+  const target = allowed.indexOf(next.step);
+  return target !== -1 && latest !== -1 && target <= latest;
 }

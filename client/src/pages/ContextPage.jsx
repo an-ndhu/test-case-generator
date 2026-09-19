@@ -26,8 +26,26 @@ export default function ContextPage() {
     dispatch(addProjectFile({ id, file }));
   }
 
+  function removeFile(index) {
+    const next = (current.files || []).filter((_, i) => i !== index);
+    dispatch(patchProject({ id, files: next }));
+  }
+
   async function continueNext() {
-    const result = await dispatch(patchProject({ id, contextNote, requirementText: contextNote, step: 'design' }));
+    const text = (note || current?.contextNote || composer || '').trim();
+    if (!text && !(current.files || []).length) {
+      setFileError('Add a file or describe the context.');
+      return;
+    }
+    setFileError('');
+    const result = await dispatch(
+      patchProject({
+        id,
+        contextNote: text || current.contextNote,
+        requirementText: text || current.requirementText,
+        step: 'design',
+      })
+    );
     if (patchProject.fulfilled.match(result)) navigate(`/projects/${id}/design`);
   }
 
@@ -70,10 +88,17 @@ export default function ContextPage() {
             onChange={(e) => setNote(e.target.value)}
           />
         </label>
-        {current.files?.length > 0 && (
-          <div className="selected-file">
-            <span className="material-symbols-outlined">description</span>
-            {current.files.map((f) => f.name).join(', ')}
+        {(current.files || []).length > 0 && (
+          <div className="file-list">
+            {current.files.map((f, i) => (
+              <div key={`${f.name}-${i}`} className="selected-file">
+                <span className="material-symbols-outlined">description</span>
+                <span className="grow">{f.name}</span>
+                <button type="button" className="icon-btn" title="Remove" onClick={() => removeFile(i)}>
+                  <span className="material-symbols-outlined">delete</span>
+                </button>
+              </div>
+            ))}
           </div>
         )}
         <div className="actions end">

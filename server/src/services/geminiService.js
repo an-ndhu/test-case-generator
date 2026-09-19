@@ -46,6 +46,11 @@ function isQuotaError(err) {
   return /quota|billing|exceeded your current/i.test(msg) && !/rate/i.test(msg);
 }
 
+function isUnavailable(err) {
+  const msg = String(err?.message || '');
+  return statusOf(err) === 503 || /UNAVAILABLE|high demand|try again later/i.test(msg);
+}
+
 function isRateLimit(err) {
   const msg = String(err?.message || '');
   return statusOf(err) === 429 || /RESOURCE_EXHAUSTED|Too Many Requests|rate.?limit/i.test(msg);
@@ -84,7 +89,7 @@ async function generateJson(prompt, opts) {
       return await callGemini(prompt, opts);
     } catch (err) {
       lastErr = err;
-      if (isRateLimit(err) && !isQuotaError(err) && attempt < 3) {
+      if ((isRateLimit(err) || isUnavailable(err)) && !isQuotaError(err) && attempt < 3) {
         await sleep(retryWaitMs(attempt));
         continue;
       }
@@ -100,7 +105,7 @@ function wrapAiError(err) {
     err.status &&
     !err.error &&
     !/googleapis\.com|API_KEY_INVALID|UNAUTHENTICATED/i.test(err.message || '');
-  if (alreadyMapped) return err;
+  if (alreadyMapped && !isUnavailable(err) && !isRateLimit(err) && !isQuotaError(err)) return err;
 
   console.error('Gemini error', statusOf(err), err.message);
 
@@ -115,6 +120,12 @@ function wrapAiError(err) {
   if (isRateLimit(err)) {
     const wrapped = new Error('The AI provider is rate-limiting us. Wait a moment and try again.');
     wrapped.status = 429;
+    return wrapped;
+  }
+
+  if (isUnavailable(err)) {
+    const wrapped = new Error('The AI provider is busy. Wait a moment and try again.');
+    wrapped.status = 503;
     return wrapped;
   }
 
@@ -148,6 +159,7 @@ function normalizeCases(raw) {
         ? c.steps.map((s) => String(s).trim()).filter(Boolean)
         : [],
       expected: String(c.expected || '').trim(),
+      workflowIndex: Number.isInteger(c.workflowIndex) ? c.workflowIndex : 0,
     }));
 }
 
@@ -211,13 +223,22 @@ Return:
     "preconditions": "string",
     "steps": ["step"],
     "expected": "string",
-    "explicit": true
+    "explicit": true,
+    "workflowIndex": 0
   }]
 }
 
 Limits: 3-5 workflows, 8-12 rules, 4-8 user stories, 6-10 test cases.
 Each workflow graph: 4-7 nodes and matching edges.
 Stay faithful to the given context. If format is bdd or bdd2, write test case steps in Gherkin-style Given/When/Then.`;
+
+function applyDesignFlags(payload, session) {
+  const wantStories = session?.design?.wantStories !== false;
+  const wantCases = session?.design?.wantCases !== false;
+  if (!wantStories) payload.userStories = [];
+  if (!wantCases) payload.testCases = [];
+  return payload;
+}
 
 function normalizeStudio(raw) {
   const workflows = Array.isArray(raw.workflows) ? raw.workflows : [];
@@ -307,13 +328,19 @@ export async function generateStudio(session) {
     .join('\n');
 
   try {
-    let payload = ensureGraphs(normalizeStudio(parseJson(await generateJson(prompt, { system: STUDIO_PROMPT, maxOutputTokens: 8192 }))));
-    if (!payload.workflows.length && !payload.testCases.length) {
-      payload = ensureGraphs(normalizeStudio(
-        parseJson(await generateJson(`${prompt}\n\nReturn a non-empty JSON object as specified.`, { system: STUDIO_PROMPT, maxOutputTokens: 8192 }))
-      ));
+    let payload = applyDesignFlags(
+      ensureGraphs(normalizeStudio(parseJson(await generateJson(prompt, { system: STUDIO_PROMPT, maxOutputTokens: 8192 })))),
+      session
+    );
+    if (!payload.workflows.length) {
+      payload = applyDesignFlags(
+        ensureGraphs(normalizeStudio(
+          parseJson(await generateJson(`${prompt}\n\nReturn a non-empty JSON object as specified.`, { system: STUDIO_PROMPT, maxOutputTokens: 8192 }))
+        )),
+        session
+      );
     }
-    if (!payload.workflows.length && !payload.testCases.length) {
+    if (!payload.workflows.length) {
       const err = new Error('The model returned no usable artifacts. Try regenerating.');
       err.status = 502;
       throw err;

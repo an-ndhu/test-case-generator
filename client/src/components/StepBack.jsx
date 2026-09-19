@@ -6,10 +6,12 @@ import { patchProject } from '../store/sessionsSlice';
 export default function StepBack({ id, current }) {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const latestStep = useSelector((s) => s.sessions.current?.latestStep || s.sessions.current?.step);
-  const prev = previousOf(current);
-  const nxt = nextOf(current);
-  const showForward = nxt && canGoForward(current, latestStep);
+  const session = useSelector((s) => s.sessions.current);
+  const design = session?.design;
+  const latestStep = session?.latestStep || session?.step;
+  const prev = previousOf(current, design);
+  const nxt = nextOf(current, design);
+  const showForward = nxt && canGoForward(current, latestStep, design);
 
   async function go(entry) {
     if (!entry) return;

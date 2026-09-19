@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import ChatRail from '../components/ChatRail';
 import StepBack from '../components/StepBack';
 import WorkflowChart from '../components/WorkflowChart';
+import { nextOf } from '../api/steps';
 import { useProject } from '../hooks/useProject';
 import { patchProject } from '../store/sessionsSlice';
 
@@ -10,6 +11,8 @@ export default function CanvasPage() {
   const { wfId } = useParams();
   const { id, current, dispatch } = useProject();
   const navigate = useNavigate();
+  const [composer, setComposer] = useState('');
+  const [localError, setLocalError] = useState('');
 
   const wfs = current?.workflows || [];
   const initial = Math.max(0, wfs.findIndex((w) => w._id === wfId));
@@ -21,8 +24,19 @@ export default function CanvasPage() {
   const wf = { ...wfs[index], _index: index };
 
   async function approve() {
-    await dispatch(patchProject({ id, step: 'rules' }));
-    navigate(`/projects/${id}/rules`);
+    const chosen = wfs.filter((w) => w.selected !== false);
+    if (!chosen.length) {
+      setLocalError('Select at least one workflow on the list, then approve.');
+      return;
+    }
+    setLocalError('');
+    const nxt = nextOf('canvas', current.design);
+    if (!nxt) {
+      navigate('/');
+      return;
+    }
+    await dispatch(patchProject({ id, step: nxt.step }));
+    navigate(nxt.path(id));
   }
 
   return (
@@ -35,6 +49,7 @@ export default function CanvasPage() {
             ✕
           </button>
         </div>
+        {localError && <p className="banner">{localError}</p>}
         <label className="wf-select">
           <select
             value={index}
@@ -61,13 +76,23 @@ export default function CanvasPage() {
           </button>
         </div>
       </div>
-      <ChatRail statusLine="Test Cases are created successfully. Please review the workflows">
+      <ChatRail
+        statusLine="Test Cases are created successfully. Please review the workflows"
+        composerProps={{ value: composer, onChange: setComposer, onSubmit: approve }}
+      >
         <div className="mini-list">
           {wfs.map((w, i) => (
             <div key={w._id || i} className="acc">
               <strong>{w.title}</strong>
               <p className="meta">{w.summary}</p>
-              <button type="button" className="linkish" onClick={() => { setSel(i); navigate(`/projects/${id}/workflows/${w._id || i}`); }}>
+              <button
+                type="button"
+                className="linkish"
+                onClick={() => {
+                  setSel(i);
+                  navigate(`/projects/${id}/workflows/${w._id || i}`);
+                }}
+              >
                 View workflow
               </button>
             </div>

@@ -9,13 +9,21 @@ export default function NamePage() {
   const { id, current, dispatch, error } = useProject();
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
-  const [note, setNote] = useState('');
+  const [composer, setComposer] = useState('');
+  const [localError, setLocalError] = useState('');
 
-  const value = title || current?.title || '';
+  const stored = current?.title && current.title !== 'Untitled project' ? current.title : '';
+  const value = title || stored;
 
   async function continueNext() {
+    const chosen = (title.trim() || stored || composer.trim()).trim();
+    if (!chosen || chosen === 'Untitled project') {
+      setLocalError('Enter a project name to continue.');
+      return;
+    }
+    setLocalError('');
     const result = await dispatch(
-      patchProject({ id, title: value, contextNote: current?.contextNote || '', step: 'context' })
+      patchProject({ id, title: chosen, contextNote: current?.contextNote || '', step: 'context' })
     );
     if (patchProject.fulfilled.match(result)) navigate(`/projects/${id}/context`);
   }
@@ -29,10 +37,10 @@ export default function NamePage() {
         <span className="pearl" />
         I&apos;m creating a new project for testcase generation. Please enter a name for your project.
       </p>
-      {error && <p className="banner">{error}</p>}
+      {(error || localError) && <p className="banner">{error || localError}</p>}
       <div className="inline-name">
         <input
-          value={value === 'Untitled project' ? title : value}
+          value={value}
           placeholder="Enter Project Name"
           onChange={(e) => setTitle(e.target.value)}
         />
@@ -41,7 +49,12 @@ export default function NamePage() {
         </button>
       </div>
       <div className="wizard-foot">
-        <Composer value={note} onChange={setNote} onSubmit={continueNext} />
+        <Composer
+          value={composer}
+          onChange={setComposer}
+          onSubmit={continueNext}
+          placeholder="Type a project name, then send"
+        />
       </div>
     </div>
   );

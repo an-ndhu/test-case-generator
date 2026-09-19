@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { downloadCsv } from '../api/sessions';
 import Composer from '../components/Composer';
 import StepBack from '../components/StepBack';
@@ -7,16 +8,24 @@ import { regenerateProject } from '../store/sessionsSlice';
 
 export default function ExportPage() {
   const { id, current, dispatch, notice, error, status } = useProject();
+  const navigate = useNavigate();
   const [toast, setToast] = useState('');
   const [composer, setComposer] = useState('');
   const [open, setOpen] = useState(0);
 
   if (!current) return <div className="spinner" />;
-  const cases = current.testCases || [];
+  const cases = (current.testCases || []).filter((c) => c.selected !== false);
 
   async function excel() {
     await downloadCsv(id, current.title);
     setToast('Exported as CSV (Excel).');
+  }
+
+  async function regen() {
+    const result = await dispatch(regenerateProject(id));
+    if (regenerateProject.fulfilled.match(result)) {
+      navigate(`/projects/${id}/workflows`);
+    }
   }
 
   return (
@@ -45,13 +54,8 @@ export default function ExportPage() {
           <button className="btn primary" type="button" onClick={excel}>
             Export as Excel
           </button>
-          <button
-            className="btn"
-            type="button"
-            disabled={status === 'busy'}
-            onClick={() => dispatch(regenerateProject(id))}
-          >
-            Regenerate
+          <button className="btn" type="button" disabled={status === 'busy'} onClick={regen}>
+            {status === 'busy' ? 'Regenerating…' : 'Regenerate'}
           </button>
         </div>
       </section>

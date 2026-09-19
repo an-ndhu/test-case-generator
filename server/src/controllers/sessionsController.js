@@ -39,6 +39,7 @@ function listItem(row) {
     latestStep: inferLatest(row),
     updatedAt: row.updatedAt,
     caseCount: row.testCases?.length || 0,
+    design: row.design,
   };
 }
 
@@ -69,7 +70,7 @@ export async function listSessions(req, res, next) {
   try {
     const rows = await Session.find({ userId: req.userId })
       .sort({ updatedAt: -1 })
-      .select('title status step latestStep updatedAt testCases')
+      .select('title status step latestStep updatedAt testCases design')
       .lean();
     res.json(rows.map(listItem));
   } catch (err) {
@@ -109,9 +110,28 @@ export async function updateSession(req, res, next) {
     if (Array.isArray(body.rules)) session.rules = body.rules;
     if (Array.isArray(body.userStories)) session.userStories = body.userStories;
     if (Array.isArray(body.testCases)) session.testCases = body.testCases;
+    if (Array.isArray(body.files)) {
+      session.files = body.files.map((f) => ({
+        name: String(f?.name || 'file'),
+        text: String(f?.text || ''),
+      }));
+    }
 
-    await session.save();
-    res.json(session);
+    const payload = session.toObject();
+    delete payload.__v;
+    delete payload._id;
+    delete payload.id;
+    const updated = await Session.findOneAndUpdate(
+      { _id: session._id, userId: req.userId },
+      { $set: payload },
+      { new: true, runValidators: true }
+    );
+    if (!updated) {
+      const err = new Error('Session not found.');
+      err.status = 404;
+      throw err;
+    }
+    res.json(updated);
   } catch (err) {
     next(err);
   }

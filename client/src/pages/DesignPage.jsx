@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ChatRail from '../components/ChatRail';
 import Composer from '../components/Composer';
@@ -9,7 +9,7 @@ import { generateProject, patchProject } from '../store/sessionsSlice';
 const CATEGORIES = ['Functional', 'Negative', 'Boundary', 'Exploratory'];
 const TECHNIQUES = ['Equivalence partitioning', 'Boundary value', 'Decision table', 'State transition'];
 
-function DesignForm({ current, category, setCategory, technique, setTechnique, format, setFormat, wantCases, setWantCases, wantStories, setWantStories, onCancel, onGenerate, busy }) {
+function DesignForm({ category, setCategory, technique, setTechnique, format, setFormat, wantCases, setWantCases, wantStories, setWantStories, onCancel, onGenerate, busy }) {
   return (
     <section className="panel">
       <div className="panel-head">
@@ -74,11 +74,20 @@ export default function DesignPage() {
   const navigate = useNavigate();
   const split = useLocation().pathname.endsWith('/split');
   const [composer, setComposer] = useState('');
-  const [category, setCategory] = useState(current?.design?.category || '');
-  const [technique, setTechnique] = useState(current?.design?.technique || '');
-  const [format, setFormat] = useState(current?.design?.format || 'standard');
-  const [wantCases, setWantCases] = useState(current?.design?.wantCases !== false);
-  const [wantStories, setWantStories] = useState(current?.design?.wantStories !== false);
+  const [category, setCategory] = useState('');
+  const [technique, setTechnique] = useState('');
+  const [format, setFormat] = useState('standard');
+  const [wantCases, setWantCases] = useState(true);
+  const [wantStories, setWantStories] = useState(true);
+
+  useEffect(() => {
+    if (!current?.design) return;
+    setCategory(current.design.category || '');
+    setTechnique(current.design.technique || '');
+    setFormat(current.design.format || 'standard');
+    setWantCases(current.design.wantCases !== false);
+    setWantStories(current.design.wantStories !== false);
+  }, [current]);
 
   async function generate() {
     const patched = await dispatch(
@@ -97,7 +106,6 @@ export default function DesignPage() {
 
   const form = (
     <DesignForm
-      current={current}
       category={category}
       setCategory={setCategory}
       technique={technique}
@@ -114,6 +122,13 @@ export default function DesignPage() {
     />
   );
 
+  const composerProps = {
+    value: composer,
+    onChange: setComposer,
+    onSubmit: generate,
+    busy: status === 'busy',
+  };
+
   if (split) {
     return (
       <div className="split">
@@ -127,9 +142,10 @@ export default function DesignPage() {
           </div>
           {form}
         </div>
-        <ChatRail statusLine={`Associated context updated. Knowledge graph name : ${current.title}`}>
-          {form}
-        </ChatRail>
+        <ChatRail
+          statusLine={`Associated context updated. Knowledge graph name : ${current.title}`}
+          composerProps={composerProps}
+        />
       </div>
     );
   }
@@ -149,7 +165,7 @@ export default function DesignPage() {
         {form}
       </div>
       <div className="wizard-foot">
-        <Composer value={composer} onChange={setComposer} onSubmit={generate} busy={status === 'busy'} />
+        <Composer {...composerProps} />
       </div>
     </div>
   );
